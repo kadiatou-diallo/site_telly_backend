@@ -29,7 +29,8 @@ const allowedOrigins = [
   'https://telly-tech.com',
   'https://www.telly-tech.com',
   'https://tellytech-backkend-rkms.vercel.app',
-  'https://sparkling-glade-3839.pages.dev'
+  'https://sparkling-glade-3839.pages.dev',
+  'https://site-telly-backend.vercel.app'
 ];
 
 app.use(cors({
