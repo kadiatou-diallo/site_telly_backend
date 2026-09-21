@@ -1,6 +1,10 @@
 import prisma from '../config/database.js';
 import courseService from '../services/course.service.js';
 
+// 🆕 Image de module (optionnelle)
+const TYPES_IMAGE = ['image/jpeg', 'image/png', 'image/webp'];
+const TAILLE_MAX_IMAGE = 5 * 1024 * 1024; // 5 Mo
+
 class CourseController {
 
   // ── MODULES ──────────────────────────────────────────────
@@ -38,6 +42,62 @@ class CourseController {
     } catch (error) {
       console.error('❌ supprimerModule:', error);
       res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  // ── 🆕 IMAGE DU MODULE (optionnelle) ──────────────────────
+  // PUT /modules/:id/image
+  //   → multipart : champ "image" (jpeg / png / webp, 5 Mo max)
+  //   → OU JSON   : { "imageUrl": "https://..." }
+  async definirImageModule(req, res) {
+    try {
+      const { id } = req.params;
+      const imageFile = req.file || null;
+      const imageUrlBody = typeof req.body?.imageUrl === 'string' ? req.body.imageUrl.trim() : '';
+
+      if (!imageFile && !imageUrlBody) {
+        return res.status(400).json({
+          success: false,
+          message: 'Fournir une image (champ "image") ou une imageUrl'
+        });
+      }
+
+      if (imageFile) {
+        if (!TYPES_IMAGE.includes(imageFile.mimetype)) {
+          return res.status(400).json({ success: false, message: 'Format accepté : JPEG, PNG ou WebP' });
+        }
+        if (imageFile.size > TAILLE_MAX_IMAGE) {
+          return res.status(400).json({ success: false, message: 'Image trop lourde (5 Mo maximum)' });
+        }
+      } else if (!/^https?:\/\//i.test(imageUrlBody)) {
+        return res.status(400).json({ success: false, message: "imageUrl doit commencer par http:// ou https://" });
+      }
+
+      const moduleMaj = await courseService.definirImageModule(id, {
+        imageFile,
+        imageUrl: imageUrlBody,
+      });
+
+      res.json({ success: true, message: 'Image du module enregistrée', module: moduleMaj });
+    } catch (error) {
+      console.error('❌ definirImageModule:', error);
+      const status = error.message === 'Module introuvable' ? 404 : 500;
+      res.status(status).json({ success: false, message: error.message });
+    }
+  }
+
+  // DELETE /modules/:id/image → le module n'a plus d'image (le front affiche un visuel par défaut)
+  async supprimerImageModule(req, res) {
+    try {
+      const { id } = req.params;
+
+      const moduleMaj = await courseService.supprimerImageModule(id);
+
+      res.json({ success: true, message: 'Image du module supprimée', module: moduleMaj });
+    } catch (error) {
+      console.error('❌ supprimerImageModule:', error);
+      const status = error.message === 'Module introuvable' ? 404 : 500;
+      res.status(status).json({ success: false, message: error.message });
     }
   }
 
@@ -167,6 +227,46 @@ class CourseController {
   }
 
   // ── LECTURE ───────────────────────────────────────────────
+
+  // 🆕 PUBLIC (sans authentification) : TOUS les modules, toutes formations confondues.
+  // Aucun contenu de leçon n'est exposé (ni vidéo, ni PDF) : uniquement de quoi
+  // afficher les cartes. Filtre optionnel : ?formation=...
+  async getModulesPublics(req, res) {
+    try {
+      const { formation } = req.query;
+
+      const where = formation
+        ? { formation: { contains: String(formation), mode: 'insensitive' } }
+        : {};
+
+      const modules = await prisma.courseModule.findMany({
+        where,
+        orderBy: [{ formation: 'asc' }, { ordre: 'asc' }],
+        select: {
+          id:          true,
+          formation:   true,
+          titre:       true,
+          ordre:       true,
+          description: true,
+          duree:       true,
+          imageUrl:    true,   // null si pas d'image → le front affiche un visuel par défaut
+          _count:      { select: { lessons: true } },
+        },
+      });
+
+      const resultat = modules.map(({ _count, ...m }) => ({
+        ...m,
+        nombreLecons: _count.lessons,
+      }));
+
+      res.set('Cache-Control', 'public, max-age=60');
+      res.json({ success: true, count: resultat.length, modules: resultat });
+    } catch (error) {
+      console.error('❌ getModulesPublics:', error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
   async getCoursAvecProgression(req, res) {
     try {
       console.log('🔵 [CONTROLLER] getCoursAvecProgression ==========');

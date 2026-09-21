@@ -42,11 +42,43 @@ const uploadSubmission = multer({
   },
 }).single('file');   // champ "file" — optionnel si l'étudiant soumet un lien
 
+// ── 🆕 Multer image de module (optionnelle) ───────────────
+const multerImage = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },   // 5 Mo
+  fileFilter: (req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    allowed.includes(file.mimetype)
+      ? cb(null, true)
+      : cb(new Error('Format non supporté (jpeg, png, webp)'));
+  },
+}).single('image');   // champ "image"
+
+// Renvoie une erreur JSON claire (400) au lieu d'une erreur serveur brute
+const uploadImage = (req, res, next) => {
+  multerImage(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({
+        success: false,
+        message: err.code === 'LIMIT_FILE_SIZE' ? 'Image trop lourde (5 Mo maximum)' : err.message,
+      });
+    }
+    next();
+  });
+};
+
+// ── 🆕 PUBLIC — Modules de toutes les formations (sans connexion) ──
+router.get('/public/modules', (req, res) => courseController.getModulesPublics(req, res));
+
 // ── ADMIN / COACH — Modules ───────────────────────────────
 router.get(   '/admin/all',         authenticate, requireAdminOrCoach, (req, res) => courseController.getAllCours(req, res));
 router.post(  '/admin/modules',     authenticate, requireAdminOrCoach, (req, res) => courseController.creerModule(req, res));
 router.put(   '/admin/modules/:id', authenticate, requireAdminOrCoach, (req, res) => courseController.modifierModule(req, res));
 router.delete('/admin/modules/:id', authenticate, requireAdminOrCoach, (req, res) => courseController.supprimerModule(req, res));
+
+// ── 🆕 ADMIN / COACH — Image du module (optionnelle) ──────
+router.put(   '/admin/modules/:id/image', authenticate, requireAdminOrCoach, uploadImage, (req, res) => courseController.definirImageModule(req, res));
+router.delete('/admin/modules/:id/image', authenticate, requireAdminOrCoach,              (req, res) => courseController.supprimerImageModule(req, res));
 
 // ── ADMIN / COACH — Leçons ────────────────────────────────
 router.post(  '/admin/lessons',     authenticate, requireAdminOrCoach, uploadCours, (req, res) => courseController.creerLecon(req, res));

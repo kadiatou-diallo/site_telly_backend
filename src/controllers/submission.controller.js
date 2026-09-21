@@ -347,10 +347,12 @@ async getToutesSoumissions(req, res) {
 }
   /**
    * 📋 Toutes les soumissions leçons (admin)
+   *//**
+   * 📋 Toutes les soumissions leçons (admin)
    */
   async getToutesLessonSoumissions(req, res) {
     try {
-      const { status, formation, cohorte } = req.query;
+      const { status, formation, moduleId, cohorte } = req.query;
 
       const where = {};
       if (status) where.status = status;
@@ -360,22 +362,60 @@ async getToutesSoumissions(req, res) {
         include: {
           inscription: {
             select: { id: true, nom: true, prenom: true, email: true, formation: true, cohorte: true }
+          },
+          // 🆕 Jointure vers la leçon puis le module pour récupérer les titres
+          lesson: {
+            select: {
+              id: true,
+              titre: true,
+              ordre: true,
+              module: {
+                select: { id: true, titre: true, formation: true, ordre: true }
+              }
+            }
           }
         },
         orderBy: { createdAt: 'desc' }
       });
 
       let filtered = submissions;
+
+      // Formation : on privilégie celle du module (source de vérité du contenu),
+      // avec repli sur celle de l'inscription si la leçon a été supprimée.
       if (formation) {
-        filtered = filtered.filter(s =>
-          s.inscription.formation.toLowerCase().includes(formation.toLowerCase())
-        );
-      }
-      if (cohorte) {
-        filtered = filtered.filter(s => s.inscription.cohorte === parseInt(cohorte));
+        filtered = filtered.filter(s => {
+          const f = s.lesson?.module?.formation ?? s.inscription?.formation ?? '';
+          return f.toLowerCase().includes(formation.toLowerCase());
+        });
       }
 
-      res.json({ success: true, count: filtered.length, submissions: filtered });
+      if (moduleId) {
+        filtered = filtered.filter(s => s.lesson?.module?.id === moduleId);
+      }
+
+      if (cohorte) {
+        filtered = filtered.filter(s => s.inscription?.cohorte === parseInt(cohorte));
+      }
+
+      const formatted = filtered.map(sub => ({
+        id: sub.id,
+        lessonId: sub.lessonId,
+        lessonTitle: sub.lesson?.titre ?? null,
+        moduleId: sub.lesson?.module?.id ?? null,
+        moduleTitle: sub.lesson?.module?.titre ?? null,
+        formation: sub.lesson?.module?.formation ?? sub.inscription?.formation ?? null,
+        link: sub.link,
+        fileUrl: sub.fileUrl,
+        fileName: sub.fileName,
+        note: sub.note,
+        feedback: sub.feedback,
+        status: sub.status,
+        createdAt: sub.createdAt,
+        updatedAt: sub.updatedAt,
+        inscription: sub.inscription
+      }));
+
+      res.json({ success: true, count: formatted.length, submissions: formatted });
 
     } catch (error) {
       console.error('❌ getToutesLessonSoumissions:', error);

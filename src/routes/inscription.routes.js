@@ -9,12 +9,14 @@ import {
   getStatistiques,
   marquerEtudiantInactif,
   reactiverEtudiant,
+  inscrireGratuit,
 } from '../controllers/inscription.controller.js';
 
 const router = express.Router();
 
 // ── PUBLIC ──────────────────────────────────────────────────
 router.post('/inscrire', inscrireFormation);
+router.post('/inscrire-gratuit', inscrireGratuit);
 
 // ── ADMIN ───────────────────────────────────────────────────
 router.get('/admin/pending',          getInscriptionsPendantes);

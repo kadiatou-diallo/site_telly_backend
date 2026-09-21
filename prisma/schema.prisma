@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Formation {
@@ -55,6 +56,10 @@ model Inscription {
   // 🆕 Date réelle de démarrage de l'étudiant (peut différer de la date
   // officielle de la cohorte si l'étudiant rejoint en retard).
   // Fixée automatiquement à la validation, modifiable par l'admin.
+    mode               ModeInscription    @default(PRESENTIEL)
+  universite         String?
+  promotion          String?
+  filiere            String?
   dateDemarrage      DateTime?
   dateFinFormation   DateTime?
   status             Status             @default(PENDING)
@@ -65,6 +70,7 @@ model Inscription {
   lessonSubmissions  LessonSubmission[]
   paiements          Paiement[]
   submissions        Submission[]
+    relances      Relance[]
 }
 
 model Paiement {
@@ -94,6 +100,8 @@ model CourseModule {
   ordre       Int
   description String
   duree       String
+  imageUrl      String?   // 🆕 photo optionnelle du module
+ 
   objectifs   String[]
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
@@ -356,7 +364,18 @@ model DevoirSubmission {
   @@index([inscriptionId])
   @@index([status])
 }
+model Relance {
+  id            Int         @id @default(autoincrement())
+  inscriptionId Int
+  inscription   Inscription @relation(fields: [inscriptionId], references: [id], onDelete: Cascade)
+  canal         String      // "EMAIL" ou "WHATSAPP"
+  moisManquants String      // ex : "Août 2026, Septembre 2026"
+  statut        String      // "ENVOYE" ou "ECHEC"
+  erreur        String?
+  createdAt     DateTime    @default(now())
 
+  @@index([inscriptionId, canal, createdAt])
+}
 model EmploiDuTemps {
   id         Int       @id @default(autoincrement())
   formation  String
@@ -418,4 +437,10 @@ enum ContentStatus {
   PENDING
   PUBLISHED
   ARCHIVED
+}
+enum ModeInscription {
+  EN_LIGNE
+  PRESENTIEL
+  PONCTUEL
+  GRATUIT
 }

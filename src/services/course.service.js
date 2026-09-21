@@ -31,19 +31,75 @@ class CourseService {
     });
   }
 
+  // 🆕 Supprime une image du stockage Cloudinary à partir de son URL
+  // (même principe que deleteVideo / deletePdf). Les URLs externes sont ignorées.
+  async _supprimerImageCloudinary(url) {
+    if (url && url.includes('res.cloudinary.com')) {
+      await uploadService.deleteFile(url, 'image');
+    }
+  }
+
+  // 🆕 Image du module (optionnelle) : fichier uploadé OU url externe
+  async definirImageModule(id, { imageFile, imageUrl }) {
+    const module = await prisma.courseModule.findUnique({ where: { id } });
+    if (!module) throw new Error('Module introuvable');
+
+    let nouvelleUrl = imageUrl;
+    if (imageFile) {
+      const uploaded = await uploadService.uploadImage(imageFile, `modules/${module.formation}`);
+      nouvelleUrl = uploaded.url;
+    }
+
+    const moduleMaj = await prisma.courseModule.update({
+      where: { id },
+      data: { imageUrl: nouvelleUrl },
+      include: { lessons: { orderBy: { ordre: 'asc' } } }
+    });
+
+    // L'ancienne image n'est supprimée qu'après la mise à jour réussie
+    if (module.imageUrl && module.imageUrl !== nouvelleUrl) {
+      await this._supprimerImageCloudinary(module.imageUrl);
+    }
+
+    return moduleMaj;
+  }
+
+  // 🆕 Retirer l'image (le front affiche alors un visuel par défaut)
+  async supprimerImageModule(id) {
+    const module = await prisma.courseModule.findUnique({ where: { id } });
+    if (!module) throw new Error('Module introuvable');
+
+    const moduleMaj = await prisma.courseModule.update({
+      where: { id },
+      data: { imageUrl: null },
+      include: { lessons: { orderBy: { ordre: 'asc' } } }
+    });
+
+    await this._supprimerImageCloudinary(module.imageUrl);
+
+    return moduleMaj;
+  }
+
   async supprimerModule(id) {
+    const module = await prisma.courseModule.findUnique({
+      where: { id },
+      select: { imageUrl: true }
+    });
+
     const lecons = await prisma.courseLesson.findMany({
       where: { moduleId: id },
       select: { videoUrl: true, videoType: true, pdfUrl: true, pdfExoUrl: true }
     });
 
-    await Promise.all(
-      lecons.flatMap(l => [
+    await Promise.all([
+      ...lecons.flatMap(l => [
         uploadService.deleteVideo(l.videoUrl),
         uploadService.deletePdf(l.pdfUrl),
         uploadService.deletePdf(l.pdfExoUrl),
-      ])
-    );
+      ]),
+      // 🆕 supprime aussi l'image du module
+      this._supprimerImageCloudinary(module?.imageUrl),
+    ]);
 
     return prisma.courseModule.delete({ where: { id } });
   }
@@ -245,7 +301,9 @@ class CourseService {
           orderBy: { ordre: 'asc' },
           include: {
             submissions: {
-              where: { inscriptionId },
+              // 🔒 Prisma ignore un filtre "undefined" → il renverrait les soumissions
+              // de TOUS les étudiants. Sans inscriptionId, on ne renvoie aucune soumission.
+              where: { inscriptionId: inscriptionId ?? -1 },
               select: {
                 id: true, status: true, note: true,
                 feedback: true, link: true,

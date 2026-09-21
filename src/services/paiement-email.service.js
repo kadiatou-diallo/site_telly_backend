@@ -11,74 +11,39 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-// 📧 Email à l'admin : Nouvelle demande de paiement
-export const envoyerEmailDemandeAdmin = async ({ 
-  nomComplet, 
-  email, 
-  formation, 
-  mois, 
-  montant,
-  paiementId 
-}) => {
-  try {
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: process.env.ADMIN_EMAIL,
-      subject: `💰 Nouvelle demande de paiement - Mois ${mois}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #f59e0b;">💰 Nouvelle demande de paiement</h2>
-          
-          <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
-            <p><strong>👤 Étudiant :</strong> ${nomComplet}</p>
-            <p><strong>📧 Email :</strong> ${email}</p>
-            <p><strong>🎓 Formation :</strong> ${formation}</p>
-            <p><strong>📅 Mois concerné :</strong> Mois ${mois}</p>
-            <p style="font-size: 18px;"><strong>💰 Montant :</strong> 
-              <span style="background: #10b981; color: white; padding: 5px 15px; border-radius: 5px; font-weight: bold;">
-                ${montant.toLocaleString('fr-FR')} FCFA
-              </span>
-            </p>
-          </div>
-          
-          <div style="background: #fee2e2; padding: 15px; border-left: 4px solid #ef4444; margin: 20px 0;">
-            <p style="margin: 0;"><strong>⚠️ À faire :</strong></p>
-            <ol style="margin: 10px 0;">
-              <li>Vérifier le paiement sur Wave/Orange Money</li>
-              <li>Aller dans l'admin et valider le paiement ID: <strong>${paiementId}</strong></li>
-              <li>L'étudiant recevra automatiquement son reçu</li>
-            </ol>
-          </div>
-        </div>
-      `
-    };
+// ============================================================
+// 🔧 Utilitaire : "Février 2026" → "Fevrier2026"
+//    (pour les noms de fichiers PDF : sans accent ni espace)
+// ============================================================
+export const slugMois = (label) =>
+  String(label || 'Mois')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]/g, '');
 
-    await transporter.sendMail(mailOptions);
-    console.log('✅ Email demande admin envoyé');
-  } catch (error) {
-    console.error('❌ Erreur email demande admin:', error);
-    throw error;
-  }
-};
-
-// 📄 Générer le reçu PDF mensuel EN BUFFER (pour production)
-export const genererRecuMensuelPDF = async ({ 
-  nomComplet, 
-  email, 
-  telephone, 
-  formation, 
+// ============================================================
+// 📄 Reçu PDF mensuel EN BUFFER
+//    `moisLabel` = "Février 2026" (mois calendaire réel).
+//    Si absent (anciennes données sans dateDemarrage) → "Mois X".
+// ============================================================
+export const genererRecuMensuelPDF = async ({
+  nomComplet,
+  email,
+  telephone,
+  formation,
   mois,
-  montant, 
+  moisLabel,
+  montant,
   paiementId,
   dateValidation = new Date()
 }) => {
   return new Promise((resolve, reject) => {
     try {
+      const libelleMois = moisLabel || `Mois ${mois}`;
+
       const doc = new PDFDocument({ size: 'A4', margin: 50 });
-      
-      // ✅ Stocker le PDF dans un Buffer au lieu d'un fichier
+
       const buffers = [];
-      
       doc.on('data', buffers.push.bind(buffers));
       doc.on('end', () => {
         const pdfBuffer = Buffer.concat(buffers);
@@ -87,7 +52,7 @@ export const genererRecuMensuelPDF = async ({
       });
       doc.on('error', reject);
 
-      // Logo (optionnel - vérifier s'il existe)
+      // Logo (optionnel)
       const logoPath = path.join(process.cwd(), 'assets', 'logo.png');
       if (fs.existsSync(logoPath)) {
         doc.image(logoPath, 50, 40, { width: 150 });
@@ -120,20 +85,20 @@ export const genererRecuMensuelPDF = async ({
          .fillColor('#6b7280')
          .font('Helvetica')
          .text(`N° ${String(paiementId).padStart(5, '0')}`, 50, 190)
-         .text(`Date: ${dateValidation.toLocaleDateString('fr-FR', { 
-           day: '2-digit', 
-           month: 'long', 
-           year: 'numeric' 
+         .text(`Date: ${dateValidation.toLocaleDateString('fr-FR', {
+           day: '2-digit',
+           month: 'long',
+           year: 'numeric'
          })}`, 400, 190);
 
-      // Badge "MOIS X"
-      doc.roundedRect(220, 220, 150, 40, 5)
+      // 🆕 Badge avec le VRAI MOIS (ex : "FÉVRIER 2026") — plus large qu'avant
+      doc.roundedRect(172, 220, 250, 40, 5)
          .fillAndStroke('#3b82f6', '#2563eb');
-      
+
       doc.fontSize(18)
          .fillColor('#ffffff')
          .font('Helvetica-Bold')
-         .text(`MOIS ${mois}`, 220, 232, { width: 150, align: 'center' });
+         .text(libelleMois.toUpperCase(), 172, 232, { width: 250, align: 'center' });
 
       // Informations client
       let yPos = 280;
@@ -141,7 +106,7 @@ export const genererRecuMensuelPDF = async ({
          .fillColor('#1f2937')
          .font('Helvetica-Bold')
          .text('INFORMATIONS DE L\'ÉTUDIANT', 50, yPos);
-      
+
       yPos += 25;
       doc.fontSize(11)
          .fillColor('#374151')
@@ -149,13 +114,13 @@ export const genererRecuMensuelPDF = async ({
          .text(`Nom complet:`, 50, yPos)
          .font('Helvetica-Bold')
          .text(nomComplet, 180, yPos);
-      
+
       yPos += 20;
       doc.font('Helvetica')
          .text(`Email:`, 50, yPos)
          .font('Helvetica-Bold')
          .text(email, 180, yPos);
-      
+
       yPos += 20;
       doc.font('Helvetica')
          .text(`Téléphone:`, 50, yPos)
@@ -172,7 +137,7 @@ export const genererRecuMensuelPDF = async ({
       yPos += 50;
       doc.rect(50, yPos, 495, 30)
          .fillAndStroke('#f3f4f6', '#e5e7eb');
-      
+
       doc.fillColor('#1f2937')
          .fontSize(11)
          .font('Helvetica-Bold')
@@ -181,10 +146,11 @@ export const genererRecuMensuelPDF = async ({
 
       yPos += 30;
       doc.rect(50, yPos, 495, 40).stroke('#e5e7eb');
-      
+
+      // 🆕 Plus de "/6" codé en dur : on affiche le mois réel
       doc.fillColor('#374151')
          .font('Helvetica')
-         .text(`Mensualité ${mois}/6 - ${formation}`, 60, yPos + 12)
+         .text(`Mensualité de ${libelleMois} - ${formation}`, 60, yPos + 12, { width: 350 })
          .fontSize(12)
          .fillColor('#10b981')
          .font('Helvetica-Bold')
@@ -194,7 +160,7 @@ export const genererRecuMensuelPDF = async ({
       yPos += 40;
       doc.rect(50, yPos, 495, 35)
          .fillAndStroke('#dbeafe', '#3b82f6');
-      
+
       doc.fontSize(14)
          .fillColor('#1e40af')
          .font('Helvetica-Bold')
@@ -222,7 +188,7 @@ export const genererRecuMensuelPDF = async ({
       const signatureY = 600;
       const signaturePath = path.join(process.cwd(), 'assets', 'signature.png');
       const cachetPath = path.join(process.cwd(), 'assets', 'cachet.png');
-      
+
       doc.fontSize(10)
          .fillColor('#374151')
          .font('Helvetica')
@@ -241,7 +207,7 @@ export const genererRecuMensuelPDF = async ({
          .fillColor('#6b7280')
          .font('Helvetica')
          .text('_________________', 60, signatureY + 70);
-      
+
       if (fs.existsSync(cachetPath)) {
         doc.image(cachetPath, 400, signatureY - 10, { width: 110, height: 110 });
       } else {
@@ -249,14 +215,15 @@ export const genererRecuMensuelPDF = async ({
            .lineWidth(3)
            .strokeColor('#2563eb')
            .stroke();
-        
+
+        // 🆕 Année dynamique (avant : "2025" codé en dur)
         doc.fontSize(14)
            .fillColor('#2563eb')
            .font('Helvetica-Bold')
            .text('TELLYTECH', 415, signatureY + 25, { width: 80, align: 'center' })
            .fontSize(9)
            .text('FORMATION', 415, signatureY + 45, { width: 80, align: 'center' })
-           .text('2025', 415, signatureY + 71, { width: 80, align: 'center' });
+           .text(String(dateValidation.getFullYear()), 415, signatureY + 71, { width: 80, align: 'center' });
       }
 
       // Bas de page
@@ -267,56 +234,61 @@ export const genererRecuMensuelPDF = async ({
          .text('Merci de votre confiance !', { align: 'center' })
          .text('technologytelly@gmail.com | +221 78 111 87 69', { align: 'center' });
 
-      // ✅ IMPORTANT : Finaliser le document
       doc.end();
-      
+
     } catch (error) {
       reject(error);
     }
   });
 };
 
-// 📧 Email à l'étudiant : Paiement validé (avec Buffer)
-export const envoyerEmailPaiementValide = async ({ 
-  nomComplet, 
+// ============================================================
+// 📧 Email à l'étudiant : Paiement validé (avec reçu en pièce jointe)
+//    Le mois est affiché en toutes lettres : "Février 2026"
+// ============================================================
+export const envoyerEmailPaiementValide = async ({
+  nomComplet,
   email,
   telephone,
-  formation, 
+  formation,
   mois,
+  moisLabel,
   montant,
   paiementId,
-  recuBuffer // ✅ Reçoit un Buffer au lieu d'un chemin de fichier
+  recuBuffer
 }) => {
   try {
+    const libelleMois = moisLabel || `Mois ${mois}`;
+
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: email,
-      subject: `✅ Paiement Mois ${mois} validé - ${formation}`,
+      subject: `✅ Reçu de ${libelleMois} - ${formation}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #10b981;">✅ Votre paiement est confirmé !</h2>
-          
+
           <p>Bonjour <strong>${nomComplet}</strong>,</p>
-          
-          <p>Nous avons bien reçu votre paiement pour le <strong>Mois ${mois}</strong> de votre formation <strong>"${formation}"</strong>. 🎉</p>
-          
+
+          <p>Nous avons bien reçu votre paiement pour <strong>${libelleMois}</strong> de votre formation <strong>"${formation}"</strong>. 🎉</p>
+
           <div style="background: #10b981; color: white; padding: 20px; border-radius: 8px; text-align: center; margin: 30px 0;">
             <p style="margin: 0; font-size: 14px;">Montant payé</p>
             <h1 style="margin: 10px 0; font-size: 36px;">${montant.toLocaleString('fr-FR')} FCFA</h1>
-            <p style="margin: 0; font-size: 14px;">MOIS ${mois}/6</p>
+            <p style="margin: 0; font-size: 14px; text-transform: uppercase;">${libelleMois}</p>
           </div>
-          
+
           <div style="background: #dbeafe; padding: 15px; border-left: 4px solid #3b82f6; margin: 20px 0;">
             <p style="margin: 0;"><strong>📌 Récapitulatif :</strong></p>
             <p style="margin: 5px 0;">Formation : ${formation}</p>
-            <p style="margin: 5px 0;">Mois payé : ${mois}/6</p>
+            <p style="margin: 5px 0;">Mois payé : ${libelleMois}</p>
             <p style="margin: 5px 0;">Montant : ${montant.toLocaleString('fr-FR')} FCFA</p>
           </div>
-          
+
           <div style="background: #fef3c7; padding: 15px; border-left: 4px solid #f59e0b; margin: 20px 0;">
-            <p style="margin: 0;">📄 <strong>Votre reçu de paiement est joint à cet email.</strong></p>
+            <p style="margin: 0;">📄 <strong>Votre reçu de paiement de ${libelleMois} est joint à cet email.</strong></p>
           </div>
-          
+
           <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
             Continuez comme ça ! 🚀<br>
             L'équipe TellyTech Formation
@@ -325,8 +297,8 @@ export const envoyerEmailPaiementValide = async ({
       `,
       attachments: [
         {
-          filename: `Recu_Mois${mois}_TellyTech_${paiementId}.pdf`,
-          content: recuBuffer, // ✅ Utiliser le Buffer directement
+          filename: `Recu_${slugMois(libelleMois)}_TellyTech.pdf`,
+          content: recuBuffer,
           contentType: 'application/pdf'
         }
       ]
@@ -340,24 +312,46 @@ export const envoyerEmailPaiementValide = async ({
   }
 };
 
-// 📧 Email de rappel de paiement (à envoyer le 10 de chaque mois)
-export const envoyerEmailRappelPaiement = async ({ 
-  nomComplet, 
+// ============================================================
+// 📧 Email de rappel de paiement
+//    `moisManquants` : tableau de libellés ("Février 2026", …)
+//    ou de numéros (anciennes inscriptions sans dateDemarrage).
+// ============================================================
+export const envoyerEmailRappelPaiement = async ({
+  nomComplet,
   email,
-  formation, 
+  formation,
   moisManquants,
   montantMensuel
 }) => {
   try {
-    // Calculer le montant total dû
     const montantTotal = moisManquants.length * montantMensuel;
-    
-    // Formater la liste des mois manquants
-    const listeMois = moisManquants.length === 1 
-      ? `le <strong>Mois ${moisManquants[0]}</strong>`
-      : moisManquants.length === 2
-      ? `les <strong>Mois ${moisManquants[0]} et ${moisManquants[1]}</strong>`
-      : `les <strong>Mois ${moisManquants.slice(0, -1).join(', ')} et ${moisManquants[moisManquants.length - 1]}</strong>`;
+
+    // Normaliser : nombre → "Mois 3", texte → tel quel ("Février 2026")
+    const libelles = moisManquants.map(m => (typeof m === 'number' ? `Mois ${m}` : String(m)));
+
+    const listeFormatee = libelles.length === 1
+      ? libelles[0]
+      : `${libelles.slice(0, -1).join(', ')} et ${libelles[libelles.length - 1]}`;
+
+    const phrasePeriode = libelles.length === 1
+      ? `la période suivante : <strong>${listeFormatee}</strong>`
+      : `les périodes suivantes : <strong>${listeFormatee}</strong>`;
+
+    // Le bouton n'apparaît que si FRONTEND_URL est configurée
+    const lienEspace = process.env.FRONTEND_URL
+      ? `${process.env.FRONTEND_URL}/etudiant/dashboard`
+      : null;
+
+    const boutonEspace = lienEspace
+      ? `
+            <div style="text-align: center; margin: 35px 0 25px 0;">
+              <a href="${lienEspace}"
+                 style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 35px; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: bold; display: inline-block; box-shadow: 0 4px 6px rgba(102, 126, 234, 0.3);">
+                📄 Consulter mon espace
+              </a>
+            </div>`
+      : '';
 
     const mailOptions = {
       from: process.env.EMAIL_USER,
@@ -382,13 +376,13 @@ export const envoyerEmailRappelPaiement = async ({
             </p>
 
             <p style="font-size: 15px; color: #4b5563; line-height: 1.6; margin-bottom: 25px;">
-              Nous tenons à vous informer que nous n'avons pas encore reçu le paiement de ${listeMois} de votre mensualité.
+              Nous n'avons pas encore reçu votre mensualité pour ${phrasePeriode}.
             </p>
 
             <!-- Bloc d'information principal -->
             <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-left: 5px solid #f59e0b; padding: 25px; border-radius: 8px; margin: 30px 0;">
               <h3 style="color: #92400e; margin: 0 0 15px 0; font-size: 18px;">📋 Détails du paiement en attente</h3>
-              
+
               <table style="width: 100%; border-collapse: collapse;">
                 <tr>
                   <td style="padding: 8px 0; color: #78350f; font-size: 15px;">
@@ -403,7 +397,7 @@ export const envoyerEmailRappelPaiement = async ({
                     <strong>Mois en attente :</strong>
                   </td>
                   <td style="padding: 8px 0; color: #92400e; font-size: 15px; text-align: right;">
-                    ${moisManquants.join(', ')}
+                    ${libelles.join(', ')}
                   </td>
                 </tr>
                 <tr>
@@ -411,7 +405,7 @@ export const envoyerEmailRappelPaiement = async ({
                     <strong>Nombre de mois :</strong>
                   </td>
                   <td style="padding: 8px 0; color: #92400e; font-size: 15px; text-align: right;">
-                    ${moisManquants.length} mois
+                    ${libelles.length} mois
                   </td>
                 </tr>
                 <tr style="border-top: 2px solid #f59e0b;">
@@ -430,13 +424,13 @@ export const envoyerEmailRappelPaiement = async ({
             <!-- Instructions de paiement -->
             <div style="background: #f0f9ff; border-left: 5px solid #3b82f6; padding: 20px; border-radius: 8px; margin: 25px 0;">
               <h3 style="color: #1e40af; margin: 0 0 15px 0; font-size: 17px;">💳 Moyens de paiement acceptés</h3>
-              
+
               <div style="margin-bottom: 12px;">
                 <p style="margin: 5px 0; color: #1e40af; font-size: 14px;">
                   <strong>📱 Wave :</strong> <span style="color: #3b82f6;">+221 78 111 87 69</span>
                 </p>
               </div>
-              
+
               <div style="margin-bottom: 12px;">
                 <p style="margin: 5px 0; color: #1e40af; font-size: 14px;">
                   <strong>🍊 Orange Money :</strong> <span style="color: #3b82f6;">+221 78 111 87 69</span>
@@ -445,7 +439,7 @@ export const envoyerEmailRappelPaiement = async ({
 
               <div style="background: #dbeafe; padding: 12px; border-radius: 6px; margin-top: 15px;">
                 <p style="margin: 0; color: #1e3a8a; font-size: 13px; line-height: 1.5;">
-                  ℹ️ <strong>Important :</strong> Après votre paiement, veuillez vous connecter à votre espace étudiant sur notre plateforme pour soumettre votre demande de validation. Vous recevrez votre reçu par email dans les 24h.
+                  ℹ️ <strong>Important :</strong> Une fois votre paiement effectué, l'administration l'enregistre et le valide. Vous recevez alors automatiquement votre reçu par email. Pour toute question, contactez-nous au +221 78 111 87 69.
                 </p>
               </div>
             </div>
@@ -458,20 +452,14 @@ export const envoyerEmailRappelPaiement = async ({
               </p>
             </div>
 
-            <!-- Bouton d'action -->
-            <div style="text-align: center; margin: 35px 0 25px 0;">
-              <a href="${process.env.FRONTEND_URL || 'ps:htt//tellytech-backkend.vercel.app'}/etudiant/dashboard" 
-                 style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 35px; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: bold; display: inline-block; box-shadow: 0 4px 6px rgba(102, 126, 234, 0.3);">
-                🔐 Accéder à mon espace
-              </a>
-            </div>
+            ${boutonEspace}
 
             <!-- Message de clôture -->
             <div style="margin-top: 35px; padding-top: 25px; border-top: 2px solid #e5e7eb;">
               <p style="font-size: 15px; color: #4b5563; line-height: 1.6; margin-bottom: 15px;">
                 Nous vous remercions pour votre confiance et restons à votre disposition pour toute question.
               </p>
-              
+
               <p style="font-size: 14px; color: #6b7280; margin: 0;">
                 Cordialement,<br>
                 <strong style="color: #667eea;">L'équipe TellyTech Formation</strong>
@@ -511,7 +499,7 @@ export const envoyerEmailRappelPaiement = async ({
 
     await transporter.sendMail(mailOptions);
     console.log(`✅ Email rappel envoyé à ${email}`);
-    
+
     return { success: true, email };
   } catch (error) {
     console.error(`❌ Erreur envoi rappel à ${email}:`, error);

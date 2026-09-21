@@ -21,12 +21,14 @@ const buildUserResponse = async (user) => {
       console.warn('⚠️ Étudiant sans formation :', user.email);
     }
 
+    // 🆕 On lit aussi le mode (EN_LIGNE / PRESENTIEL / PONCTUEL / GRATUIT)
     const inscription = await prisma.inscription.findFirst({
       where:  { email: user.email, status: 'VALIDATED' },
-      select: { id: true },
+      select: { id: true, mode: true },
     });
 
-    base.inscriptionId = inscription?.id ?? null;
+    base.inscriptionId = inscription?.id   ?? null;
+    base.mode          = inscription?.mode ?? null;
 
     if (!base.inscriptionId) {
       console.warn('⚠️ Aucune inscription validée pour :', user.email);
@@ -74,7 +76,11 @@ export const login = async (req, res) => {
 
     console.log('✅ Login réussi:', user.email, '| role:', user.role);
     if (user.role === 'USER') {
-      console.log('📚 Formation:', userResponse.formation, '| inscriptionId:', userResponse.inscriptionId);
+      console.log(
+        '📚 Formation:', userResponse.formation,
+        '| inscriptionId:', userResponse.inscriptionId,
+        '| mode:', userResponse.mode
+      );
     }
 
     res.json({ success: true, message: 'Connexion réussie', token, user: userResponse });
