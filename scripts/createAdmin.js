@@ -5,7 +5,7 @@ async function createAdmin() {
   try {
     // Vérifier si l'admin existe déjà
     const existingAdmin = await prisma.user.findUnique({
-      where: { email: 'technologytelly@gmail.com' }
+      where: { email: 'kadiatoutelly@gmail.com' }
     });
 
     if (existingAdmin) {
@@ -17,13 +17,13 @@ async function createAdmin() {
     }
 
     // Hasher le mot de passe
-    const hashedPassword = await bcrypt.hash('2025', 10);
+    const hashedPassword = await bcrypt.hash('8090', 10);
 
     // Créer l'admin
     const admin = await prisma.user.create({
       data: {
         nom: 'Admin Telly',
-        email: 'technologytelly@gmail.com',
+        email: 'kadiatou685telly@gmail.com',
         password: hashedPassword,
         role: 'ADMIN'
       }

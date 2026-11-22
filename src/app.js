@@ -15,6 +15,7 @@ import articleRoutes from "./routes/article.routes.js";
 import commentaireRoutes from "./routes/commentaire.routes.js";
 import likeRoutes from "./routes/like.routes.js";
 import galerieRoutes from "./routes/galerie.routes.js";
+import campagneRoutes from './routes/campagne.routes.js';
 
 dotenv.config();
 
@@ -88,6 +89,7 @@ app.use("/api", articleRoutes);
 app.use("/api", commentaireRoutes);
 app.use("/api", likeRoutes);
 app.use("/api", galerieRoutes);
+app.use('/api/campagnes', campagneRoutes);
 
 // 404 - Route non trouvée
 app.use((req, res) => {

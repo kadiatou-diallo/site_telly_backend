@@ -28,6 +28,43 @@ model Formation {
   objectifs          String?
   prerequis          String?
 }
+model Campagne {
+  id            Int                    @id @default(autoincrement())
+  type          TypeCampagne           @default(ANNONCE)
+  sujet         String
+  contenu       String
+  filtres       Json?
+  statut        StatutCampagne         @default(EN_COURS)
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  destinataires CampagneDestinataire[]
+}
+
+model CampagneDestinataire {
+  id         Int      @id @default(autoincrement())
+  campagneId Int
+  campagne   Campagne @relation(fields: [campagneId], references: [id], onDelete: Cascade)
+  email      String
+  prenom     String
+  nomComplet String
+  formation  String
+  statut     String   @default("EN_ATTENTE") // EN_ATTENTE | EN_COURS | ENVOYE | ECHEC
+  erreur     String?
+  envoyeAt   DateTime?
+
+  @@index([campagneId, statut])
+}
+
+enum TypeCampagne {
+  ANNONCE
+  EVENEMENT
+  DEMANDE
+}
+
+enum StatutCampagne {
+  EN_COURS
+  TERMINEE
+}
 
 model Message {
   id        Int      @id @default(autoincrement())

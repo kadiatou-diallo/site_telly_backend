@@ -2,7 +2,7 @@ import nodemailer from 'nodemailer';
 import PDFDocument from 'pdfkit';
 
 // ✅ Configuration SMTP
-const transporter = nodemailer.createTransport({
+export const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
   port: 587,
   secure: false,
@@ -343,6 +343,9 @@ export const envoyerEmailInscription = async ({
             </p>
             <p style="margin: 30px 0 10px 0; font-size: 15px;">
               Nous vous prions d'agréer, Madame, Monsieur, l'expression de nos salutations distinguées.
+            </p>
+              <p style="margin: 15px 0 0 0; color: #9ca3af; font-size: 11px; line-height: 1.5; text-align: justify;">
+              Conformément à nos conditions, tout paiement effectué auprès de TellyTech est définitif et non remboursable.
             </p>
             <div style="margin: 40px 0 0 0;">
               <p style="margin: 0 0 5px 0; font-size: 15px; font-weight: bold; color: #27446e;">Jean Mamady Cissé</p>
